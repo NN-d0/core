@@ -204,34 +204,33 @@ public class CorePageQueryService {
 
     /**
      * 告警地图表格分页
+     *
+     * 修复说明：
+     * 1. 先筛出“真正可上地图”的告警（站点存在且经纬度不为空）
+     * 2. 再基于筛选后的结果做内存分页
+     * 3. 保证当前页列表与地图点位一一对应
+     * 4. 翻页时地图严格只展示当前页数据
      */
     public PageResult<AlarmMapPointVO> pageAlarmMapPoints(long current, long size, Integer alarmStatus) {
-        Page<AlarmRecord> page = new Page<>(current, size);
+        long safeCurrent = current <= 0 ? 1 : current;
+        long safeSize = size <= 0 ? 10 : size;
 
         LambdaQueryWrapper<AlarmRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(alarmStatus != null, AlarmRecord::getAlarmStatus, alarmStatus)
                 .orderByDesc(AlarmRecord::getAlarmTime)
                 .orderByDesc(AlarmRecord::getId);
 
-        Page<AlarmRecord> resultPage = alarmRecordMapper.selectPage(page, wrapper);
-        List<AlarmRecord> records = resultPage.getRecords();
-
-        if (records == null || records.isEmpty()) {
-            PageResult<AlarmMapPointVO> result = new PageResult<>();
-            result.setCurrent(resultPage.getCurrent());
-            result.setSize(resultPage.getSize());
-            result.setTotal(resultPage.getTotal());
-            result.setPages(resultPage.getPages());
-            result.setRecords(Collections.emptyList());
-            return result;
+        List<AlarmRecord> allAlarmList = alarmRecordMapper.selectList(wrapper);
+        if (allAlarmList == null || allAlarmList.isEmpty()) {
+            return buildEmptyPageResult(safeCurrent, safeSize);
         }
 
-        Set<Long> stationIds = records.stream()
+        Set<Long> stationIds = allAlarmList.stream()
                 .map(AlarmRecord::getStationId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        Set<Long> deviceIds = records.stream()
+        Set<Long> deviceIds = allAlarmList.stream()
                 .map(AlarmRecord::getDeviceId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
@@ -239,10 +238,41 @@ public class CorePageQueryService {
         Map<Long, Station> stationMap = buildStationMap(stationIds);
         Map<Long, String> deviceNameMap = buildDeviceNameMap(deviceIds);
 
+        // 先过滤出真正能展示在地图上的告警
+        List<AlarmRecord> validAlarmList = allAlarmList.stream()
+                .filter(alarm -> {
+                    Station station = stationMap.get(alarm.getStationId());
+                    return canDisplayOnMap(station);
+                })
+                .collect(Collectors.toList());
+
+        if (validAlarmList.isEmpty()) {
+            return buildEmptyPageResult(safeCurrent, safeSize);
+        }
+
+        long total = validAlarmList.size();
+        long pages = (total + safeSize - 1) / safeSize;
+
+        long from = (safeCurrent - 1) * safeSize;
+        if (from >= total) {
+            PageResult<AlarmMapPointVO> result = new PageResult<>();
+            result.setCurrent(safeCurrent);
+            result.setSize(safeSize);
+            result.setTotal(total);
+            result.setPages(pages);
+            result.setRecords(Collections.emptyList());
+            return result;
+        }
+
+        int fromIndex = (int) from;
+        int toIndex = (int) Math.min(from + safeSize, total);
+
+        List<AlarmRecord> pageRecords = validAlarmList.subList(fromIndex, toIndex);
+
         List<AlarmMapPointVO> voList = new ArrayList<>();
-        for (AlarmRecord alarm : records) {
+        for (AlarmRecord alarm : pageRecords) {
             Station station = stationMap.get(alarm.getStationId());
-            if (station == null) {
+            if (!canDisplayOnMap(station)) {
                 continue;
             }
 
@@ -265,9 +295,29 @@ public class CorePageQueryService {
             voList.add(vo);
         }
 
-        Page<AlarmMapPointVO> voPage = new Page<>(resultPage.getCurrent(), resultPage.getSize(), resultPage.getTotal());
-        voPage.setRecords(voList);
-        return PageResult.of(voPage);
+        PageResult<AlarmMapPointVO> result = new PageResult<>();
+        result.setCurrent(safeCurrent);
+        result.setSize(safeSize);
+        result.setTotal(total);
+        result.setPages(pages);
+        result.setRecords(voList);
+        return result;
+    }
+
+    private boolean canDisplayOnMap(Station station) {
+        return station != null
+                && station.getLongitude() != null
+                && station.getLatitude() != null;
+    }
+
+    private PageResult<AlarmMapPointVO> buildEmptyPageResult(long current, long size) {
+        PageResult<AlarmMapPointVO> result = new PageResult<>();
+        result.setCurrent(current);
+        result.setSize(size);
+        result.setTotal(0L);
+        result.setPages(0L);
+        result.setRecords(Collections.emptyList());
+        return result;
     }
 
     private LocalDateTime parseDateTime(String text) {
