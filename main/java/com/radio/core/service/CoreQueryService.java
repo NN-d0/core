@@ -186,7 +186,53 @@ public class CoreQueryService {
         refreshUnreadAlarmCountCache();
         return result;
     }
+    /**
+     * 查询单条告警详情
+     */
+    public AlarmListVO getAlarmDetail(Long id) {
+        if (id == null) {
+            throw new BusinessException(400, "id 不能为空");
+        }
 
+        AlarmRecord alarm = alarmRecordMapper.selectById(id);
+        if (alarm == null) {
+            throw new BusinessException(404, "未找到该告警详情");
+        }
+
+        Set<Long> stationIds = alarm.getStationId() == null
+                ? Collections.emptySet()
+                : Collections.singleton(alarm.getStationId());
+
+        Set<Long> deviceIds = alarm.getDeviceId() == null
+                ? Collections.emptySet()
+                : Collections.singleton(alarm.getDeviceId());
+
+        Map<Long, String> stationNameMap = buildStationNameMap(stationIds);
+        Map<Long, String> deviceNameMap = buildDeviceNameMap(deviceIds);
+
+        AlarmListVO vo = new AlarmListVO();
+        vo.setId(alarm.getId());
+        vo.setAlarmNo(alarm.getAlarmNo());
+        vo.setStationId(alarm.getStationId());
+        vo.setStationName(stationNameMap.get(alarm.getStationId()));
+        vo.setDeviceId(alarm.getDeviceId());
+        vo.setDeviceName(deviceNameMap.get(alarm.getDeviceId()));
+        vo.setTaskId(alarm.getTaskId());
+        vo.setSnapshotId(alarm.getSnapshotId());
+        vo.setAlarmType(alarm.getAlarmType());
+        vo.setAlarmLevel(alarm.getAlarmLevel());
+        vo.setTitle(alarm.getTitle());
+        vo.setContent(alarm.getContent());
+        vo.setAlarmStatus(alarm.getAlarmStatus());
+        vo.setHandleUserId(alarm.getHandleUserId());
+        vo.setHandleNote(alarm.getHandleNote());
+        vo.setAlarmTime(alarm.getAlarmTime());
+        vo.setConfirmTime(alarm.getConfirmTime());
+        vo.setHandleTime(alarm.getHandleTime());
+        vo.setCreateTime(alarm.getCreateTime());
+        vo.setUpdateTime(alarm.getUpdateTime());
+        return vo;
+    }
     /**
      * 查询任务列表
      */
