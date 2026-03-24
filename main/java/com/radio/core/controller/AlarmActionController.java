@@ -8,16 +8,13 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 告警操作接口
- * 1. 确认告警
- * 2. 处理告警
  *
- * 本次修复：
- * - Controller 不再直接使用 JdbcTemplate
- * - 统一收口到 AlarmActionService
- * - 返回格式统一为 ApiResponse
+ * 统一后的接口路径：
+ * 1. POST /api/core/alarms/confirm
+ * 2. POST /api/core/alarms/handle
  */
 @RestController
-@RequestMapping({"/api/core/alarm", "/core/alarm", "/alarm"})
+@RequestMapping("/api/core/alarms")
 @RequiredArgsConstructor
 public class AlarmActionController {
 
@@ -28,7 +25,10 @@ public class AlarmActionController {
      */
     @PostMapping("/confirm")
     public ApiResponse<Boolean> confirm(@RequestBody AlarmActionReq req) {
-        return ApiResponse.success("告警已确认", alarmActionService.confirmAlarm(req == null ? null : req.getAlarmId()));
+        return ApiResponse.success(
+                "告警已确认",
+                alarmActionService.confirmAlarm(req == null ? null : req.getAlarmId())
+        );
     }
 
     /**
