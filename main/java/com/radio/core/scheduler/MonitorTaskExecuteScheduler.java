@@ -11,31 +11,38 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 任务执行调度器（最小可执行版）
+ * 任务执行调度器（关闭自发电版）
  *
- * 规则：
- * 1. 每 1 秒扫描一次任务表
- * 2. 只执行 task_status = 1 的任务
- * 3. task_status = 0 未启动：不执行
- * 4. task_status = 2 已停止：立即停止后续调度
- * 5. cronExpr 简化支持：0/5 * * * * ?、0/10 * * * * ? 等
+ * 当前规则：
+ * 1. 每 1 秒扫描一次 monitor_task
+ * 2. 只关注 task_status = 1 的运行中任务
+ * 3. 任务进入运行态时，只记录一条“等待外部仿真器上报”的日志
+ * 4. 不再调用 TaskDispatchService 生成频谱快照
+ * 5. 不再生成告警
+ * 6. 不再刷新 Redis 最新频谱
+ *
+ * 说明：
+ * 当前版本中，“任务运行”只表示业务状态已开启，
+ * 真正的数据流必须来自：
+ * Python Simulator -> Core Collect API
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MonitorTaskExecuteScheduler {
 
-    private static final Pattern CRON_SECONDS_PATTERN = Pattern.compile("0/(\\d+)");
-
     /**
-     * 记录每个任务最近一次执行时间
+     * 记录当前已经进入“运行态”的任务
+     *
+     * 用途：
+     * 1. 避免每秒都重复写激活日志
+     * 2. 任务启动后只记一次
+     * 3. 任务停止后从集合中移除
      */
-    private final ConcurrentHashMap<Long, Long> lastExecuteTimeMap = new ConcurrentHashMap<>();
+    private final Set<Long> activeTaskIds = ConcurrentHashMap.newKeySet();
 
     private final MonitorTaskMapper monitorTaskMapper;
     private final TaskDispatchService taskDispatchService;
@@ -52,34 +59,37 @@ public class MonitorTaskExecuteScheduler {
         );
 
         if (runningTasks == null || runningTasks.isEmpty()) {
-            lastExecuteTimeMap.clear();
+            activeTaskIds.clear();
             return;
         }
 
-        Set<Long> activeTaskIds = runningTasks.stream()
+        Set<Long> currentRunningIds = runningTasks.stream()
                 .map(MonitorTask::getId)
                 .collect(Collectors.toSet());
 
-        // 清理已停止 / 已删除任务的执行计时器
-        lastExecuteTimeMap.keySet().removeIf(taskId -> !activeTaskIds.contains(taskId));
-
-        long now = System.currentTimeMillis();
+        // 清理那些已经不再运行的任务
+        activeTaskIds.removeIf(taskId -> !currentRunningIds.contains(taskId));
 
         for (MonitorTask task : runningTasks) {
             try {
-                long intervalMs = resolveIntervalMs(task.getCronExpr());
-                Long lastExecuteMs = lastExecuteTimeMap.get(task.getId());
-
-                if (lastExecuteMs != null && now - lastExecuteMs < intervalMs) {
+                if (task == null || task.getId() == null) {
                     continue;
                 }
 
-                taskDispatchService.executeTask(task);
-                lastExecuteTimeMap.put(task.getId(), now);
+                // 只有任务第一次进入运行态时，才记录一次激活日志
+                boolean firstSeenRunning = activeTaskIds.add(task.getId());
+                if (!firstSeenRunning) {
+                    continue;
+                }
+
+                taskDispatchService.recordSchedulerActivatedLog(task);
+
+                log.info("任务已进入运行态（不再自发电）：taskId={}, taskName={}",
+                        task.getId(), task.getTaskName());
             } catch (Exception e) {
-                log.error("任务执行失败，taskId={}, taskName={}, error={}",
-                        task.getId(),
-                        task.getTaskName(),
+                log.error("任务运行态处理失败：taskId={}, taskName={}, error={}",
+                        task == null ? null : task.getId(),
+                        task == null ? null : task.getTaskName(),
                         e.getMessage(),
                         e);
             }
@@ -87,44 +97,23 @@ public class MonitorTaskExecuteScheduler {
     }
 
     /**
-     * 启动任务后，清掉上次执行时间，让任务尽快执行
+     * 启动任务后，移除旧状态
+     *
+     * 这样下一次扫描时会把它当作“新进入运行态”的任务，
+     * 并写入一条新的激活日志。
      */
     public void resetTaskSchedule(Long taskId) {
         if (taskId != null) {
-            lastExecuteTimeMap.remove(taskId);
+            activeTaskIds.remove(taskId);
         }
     }
 
     /**
-     * 停止任务后，立即移除执行计时器
+     * 停止任务后，立即移除运行态记录
      */
     public void removeTaskSchedule(Long taskId) {
         if (taskId != null) {
-            lastExecuteTimeMap.remove(taskId);
+            activeTaskIds.remove(taskId);
         }
-    }
-
-    private long resolveIntervalMs(String cronExpr) {
-        if (cronExpr == null || cronExpr.isBlank()) {
-            return 5000L;
-        }
-
-        Matcher matcher = CRON_SECONDS_PATTERN.matcher(cronExpr.trim());
-        if (matcher.find()) {
-            try {
-                long seconds = Long.parseLong(matcher.group(1));
-                if (seconds < 1) {
-                    seconds = 5;
-                }
-                if (seconds > 60) {
-                    seconds = 60;
-                }
-                return seconds * 1000L;
-            } catch (Exception ignored) {
-                return 5000L;
-            }
-        }
-
-        return 5000L;
     }
 }

@@ -8,6 +8,7 @@ import com.radio.core.entity.TaskExecuteLog;
 import com.radio.core.mapper.MonitorTaskMapper;
 import com.radio.core.mapper.TaskExecuteLogMapper;
 import com.radio.core.scheduler.MonitorTaskExecuteScheduler;
+import com.radio.core.service.RuntimeStatusSyncService;
 import com.radio.core.service.TaskDispatchService;
 import com.radio.core.vo.PageResult;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class TaskDispatchController {
     private final TaskExecuteLogMapper taskExecuteLogMapper;
     private final MonitorTaskExecuteScheduler taskExecuteScheduler;
     private final TaskDispatchService taskDispatchService;
+    private final RuntimeStatusSyncService runtimeStatusSyncService;
 
     /**
      * 启动任务
@@ -47,8 +49,12 @@ public class TaskDispatchController {
         task.setUpdateTime(LocalDateTime.now());
         monitorTaskMapper.updateById(task);
 
+        // 同步设备与站点状态
+        runtimeStatusSyncService.syncAfterTaskStarted(task);
+
         // 清理旧计时器，确保启动后尽快执行
         taskExecuteScheduler.resetTaskSchedule(id);
+
         return ApiResponse.success("任务已启动", null);
     }
 
@@ -68,6 +74,9 @@ public class TaskDispatchController {
 
         // 立即移除调度计时器
         taskExecuteScheduler.removeTaskSchedule(id);
+
+        // 同步设备与站点状态
+        runtimeStatusSyncService.syncAfterTaskStopped(task);
 
         // 写一条“手动停止”日志
         taskDispatchService.recordManualStopLog(task);

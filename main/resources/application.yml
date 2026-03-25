@@ -32,3 +32,15 @@ mybatis-plus:
 
 jwt:
   secret: radio-spectrum-monitor-demo-secret-key-20260313
+
+ai:
+  enabled: true
+  base-url: http://127.0.0.1:9300
+  predict-path: /predict
+  connect-timeout-ms: 3000
+  read-timeout-ms: 5000
+
+monitor:
+  offline-timeout-seconds: 30
+  offline-check-interval-ms: 5000
+  station-online-cache-ttl-seconds: 300
