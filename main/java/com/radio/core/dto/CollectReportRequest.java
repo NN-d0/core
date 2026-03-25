@@ -28,9 +28,6 @@ public class CollectReportRequest {
 
     /**
      * 任务ID
-     *
-     * 当前版本要求必须传入：
-     * 因为 Core 要校验该任务是否处于运行中（task_status = 1）
      */
     @NotNull(message = "taskId 不能为空")
     private Long taskId;
@@ -76,16 +73,14 @@ public class CollectReportRequest {
     private BigDecimal occupiedBandwidthKhz;
 
     /**
-     * AI 标签
-     *
-     * 当前主链路里，最终以 Core 调 Flask AI 的结果为准。
-     * 这里保留字段只是为了兼容历史调用，不再作为主来源。
+     * 兼容字段：允许上报方传入 AI 标签
+     * 当前主链路最终仍以 Core 调 Flask 返回结果为准
      */
     private String aiLabel;
 
     /**
-     * 是否强制触发告警：0/1
-     * 当前主链路优先以 AI shouldAlarm 为准，兜底再走 Core 阈值
+     * 兼容字段：允许上报方传入 alarmFlag
+     * 当前主链路最终仍优先以 AI shouldAlarm / Core 阈值为准
      */
     private Integer alarmFlag;
 
@@ -97,7 +92,6 @@ public class CollectReportRequest {
 
     /**
      * 瀑布图单行数据
-     * 可为空；为空时默认复用 powerPoints
      */
     private List<BigDecimal> waterfallRow;
 
@@ -106,7 +100,25 @@ public class CollectReportRequest {
      * 支持：
      * 1. yyyy-MM-dd HH:mm:ss
      * 2. ISO_LOCAL_DATE_TIME
-     * 不传则默认当前时间
      */
     private String captureTime;
+
+    /**
+     * AI 模型模式：
+     * rule / cnn / auto
+     *
+     * 当前如果不传，由 Core 配置 ai.default-model-type 决定
+     */
+    private String modelType;
+
+    /**
+     * I 通道点列
+     * 当存在且与 qPoints 配对时，Core 会把它一起传给 Flask /predict
+     */
+    private List<BigDecimal> iPoints;
+
+    /**
+     * Q 通道点列
+     */
+    private List<BigDecimal> qPoints;
 }

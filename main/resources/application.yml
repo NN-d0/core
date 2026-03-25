@@ -39,6 +39,7 @@ ai:
   predict-path: /predict
   connect-timeout-ms: 3000
   read-timeout-ms: 5000
+  default-model-type: cnn
 
 monitor:
   offline-timeout-seconds: 30

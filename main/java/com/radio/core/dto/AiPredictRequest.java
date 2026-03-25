@@ -10,8 +10,7 @@ import java.util.List;
  * Core -> Flask AI 的请求对象
  *
  * 注意：
- * Python Flask 当前要求的是 snake_case 字段名，
- * 所以这里用 @JsonProperty 显式映射。
+ * Flask 使用 snake_case 字段名
  */
 @Data
 public class AiPredictRequest {
@@ -36,4 +35,13 @@ public class AiPredictRequest {
 
     @JsonProperty("power_points")
     private List<BigDecimal> powerPoints;
+
+    @JsonProperty("model_type")
+    private String modelType;
+
+    @JsonProperty("i_points")
+    private List<BigDecimal> iPoints;
+
+    @JsonProperty("q_points")
+    private List<BigDecimal> qPoints;
 }

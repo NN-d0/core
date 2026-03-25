@@ -8,19 +8,25 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * AI 推理服务
  *
  * 职责：
  * 1. Core 统一调用 Flask /predict
- * 2. 把 AI 返回结果转换成系统内部对象
- * 3. 当 AI 服务不可用时，自动兜底，保证系统闭环不断
+ * 2. 把 CollectReportRequest 转换成 AI 请求对象
+ * 3. 支持 model_type / i_points / q_points 透传
+ * 4. 当 AI 服务不可用时自动兜底，保证闭环不断
  */
 @Slf4j
 @Service
@@ -41,6 +47,9 @@ public class AiInferenceService {
     @Value("${ai.predict-path:/predict}")
     private String aiPredictPath;
 
+    @Value("${ai.default-model-type:cnn}")
+    private String defaultModelType;
+
     /**
      * 调用 AI 预测
      */
@@ -52,7 +61,6 @@ public class AiInferenceService {
 
         try {
             String url = aiBaseUrl + aiPredictPath;
-
             AiPredictRequest aiRequest = buildAiRequest(request);
 
             HttpHeaders headers = new HttpHeaders();
@@ -81,7 +89,6 @@ public class AiInferenceService {
 
             AiPredictResultVO result = body.getData();
 
-            // 补齐兜底字段，避免空值影响后续入库
             if (result.getPredictedLabel() == null || result.getPredictedLabel().isBlank()) {
                 result.setPredictedLabel(request.getSignalType());
             }
@@ -101,7 +108,8 @@ public class AiInferenceService {
                 result.setModelName("unknown-model");
             }
 
-            log.info("AI 推理成功，label={}, confidence={}, riskLevel={}, shouldAlarm={}, model={}",
+            log.info("AI 推理成功，requestMode={}, label={}, confidence={}, riskLevel={}, shouldAlarm={}, model={}",
+                    resolveModelType(request),
                     result.getPredictedLabel(),
                     result.getConfidence(),
                     result.getRiskLevel(),
@@ -124,15 +132,35 @@ public class AiInferenceService {
         aiRequest.setOccupiedBandwidthKhz(request.getOccupiedBandwidthKhz());
         aiRequest.setChannelModel(request.getChannelModel());
         aiRequest.setPowerPoints(request.getPowerPoints());
+        aiRequest.setModelType(resolveModelType(request));
+
+        if (hasValidIq(request.getIPoints(), request.getQPoints())) {
+            aiRequest.setIPoints(request.getIPoints());
+            aiRequest.setQPoints(request.getQPoints());
+        }
+
         return aiRequest;
+    }
+
+    private String resolveModelType(CollectReportRequest request) {
+        if (request != null && request.getModelType() != null && !request.getModelType().isBlank()) {
+            return request.getModelType().trim().toLowerCase();
+        }
+        return defaultModelType == null || defaultModelType.isBlank()
+                ? "cnn"
+                : defaultModelType.trim().toLowerCase();
+    }
+
+    private boolean hasValidIq(List<BigDecimal> iPoints, List<BigDecimal> qPoints) {
+        return iPoints != null
+                && qPoints != null
+                && !iPoints.isEmpty()
+                && !qPoints.isEmpty()
+                && iPoints.size() == qPoints.size();
     }
 
     /**
      * AI 不可用时的最小兜底规则
-     *
-     * 说明：
-     * - 这里只是“保系统不断”
-     * - 真正的主要识别逻辑应以 Flask AI 为准
      */
     private AiPredictResultVO buildFallbackResult(CollectReportRequest request, String reason) {
         boolean highPower = request.getPeakPowerDbm() != null
