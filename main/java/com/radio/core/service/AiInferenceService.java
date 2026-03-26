@@ -55,7 +55,8 @@ public class AiInferenceService {
      */
     public AiPredictResultVO predict(CollectReportRequest request) {
         if (!aiEnabled) {
-            log.warn("AI 服务已禁用，使用 Core 本地兜底规则。");
+            log.warn("AI 服务已禁用，使用 Core 本地兜底规则。stationId={}, deviceId={}, taskId={}",
+                    request.getStationId(), request.getDeviceId(), request.getTaskId());
             return buildFallbackResult(request, "AI 服务已禁用，使用 Core 本地兜底规则。");
         }
 
@@ -78,49 +79,103 @@ public class AiInferenceService {
 
             ApiResponse<AiPredictResultVO> body = response.getBody();
             if (body == null) {
-                log.warn("AI 返回为空，改用 Core 本地兜底规则。");
+                log.warn("AI 返回为空，改用 Core 本地兜底规则。stationId={}, deviceId={}, taskId={}",
+                        request.getStationId(), request.getDeviceId(), request.getTaskId());
                 return buildFallbackResult(request, "AI 返回为空，使用 Core 本地兜底规则。");
             }
 
             if (body.getCode() == null || body.getCode() != 200 || body.getData() == null) {
-                log.warn("AI 返回非成功结果，body={}", body);
+                log.warn("AI 返回非成功结果，stationId={}, deviceId={}, taskId={}, body={}",
+                        request.getStationId(), request.getDeviceId(), request.getTaskId(), body);
                 return buildFallbackResult(request, "AI 返回非成功结果，使用 Core 本地兜底规则。");
             }
 
             AiPredictResultVO result = body.getData();
+            fillDefaultFields(result, request);
+            logPredictSummary(request, result);
+            return result;
+        } catch (Exception e) {
+            log.warn("AI 调用失败，改用 Core 本地兜底规则。stationId={}, deviceId={}, taskId={}, error={}",
+                    request.getStationId(), request.getDeviceId(), request.getTaskId(), e.getMessage());
+            return buildFallbackResult(request, "AI 调用失败，使用 Core 本地兜底规则：" + e.getMessage());
+        }
+    }
 
-            if (result.getPredictedLabel() == null || result.getPredictedLabel().isBlank()) {
-                result.setPredictedLabel(request.getSignalType());
-            }
-            if (result.getConfidence() == null) {
-                result.setConfidence(0.60D);
-            }
-            if (result.getRiskLevel() == null || result.getRiskLevel().isBlank()) {
-                result.setRiskLevel("LOW");
-            }
-            if (result.getShouldAlarm() == null) {
-                result.setShouldAlarm(false);
-            }
-            if (result.getReason() == null || result.getReason().isBlank()) {
-                result.setReason("AI 已返回结果，但未提供解释文本。");
-            }
-            if (result.getModelName() == null || result.getModelName().isBlank()) {
-                result.setModelName("unknown-model");
-            }
+    private void fillDefaultFields(AiPredictResultVO result, CollectReportRequest request) {
+        if (result.getPredictedLabel() == null || result.getPredictedLabel().isBlank()) {
+            result.setPredictedLabel(request.getSignalType());
+        }
+        if (result.getConfidence() == null) {
+            result.setConfidence(0.60D);
+        }
+        if (result.getRiskLevel() == null || result.getRiskLevel().isBlank()) {
+            result.setRiskLevel("LOW");
+        }
+        if (result.getShouldAlarm() == null) {
+            result.setShouldAlarm(false);
+        }
+        if (result.getReason() == null || result.getReason().isBlank()) {
+            result.setReason("AI 已返回结果，但未提供解释文本。");
+        }
+        if (result.getModelName() == null || result.getModelName().isBlank()) {
+            result.setModelName("unknown-model");
+        }
+        if (result.getRequestMode() == null || result.getRequestMode().isBlank()) {
+            result.setRequestMode(resolveModelType(request));
+        }
+        if (result.getInferenceMode() == null || result.getInferenceMode().isBlank()) {
+            result.setInferenceMode(Boolean.TRUE.equals(result.getFallbackUsed()) ? "rule" : result.getRequestMode());
+        }
+        if (result.getFallbackUsed() == null) {
+            result.setFallbackUsed(false);
+        }
+    }
 
-            log.info("AI 推理成功，requestMode={}, label={}, confidence={}, riskLevel={}, shouldAlarm={}, model={}",
-                    resolveModelType(request),
+    private void logPredictSummary(CollectReportRequest request, AiPredictResultVO result) {
+        String requestMode = safeMode(result.getRequestMode(), resolveModelType(request));
+        String actualMode = safeMode(result.getInferenceMode(), requestMode);
+        boolean fallbackUsed = Boolean.TRUE.equals(result.getFallbackUsed());
+
+        if (fallbackUsed || !requestMode.equals(actualMode)) {
+            log.warn(
+                    "AI 推理发生模式偏移。stationId={}, deviceId={}, taskId={}, requestMode={}, actualMode={}, fallbackUsed={}, label={}, confidence={}, riskLevel={}, shouldAlarm={}, model={}, reason={}",
+                    request.getStationId(),
+                    request.getDeviceId(),
+                    request.getTaskId(),
+                    requestMode,
+                    actualMode,
+                    fallbackUsed,
                     result.getPredictedLabel(),
                     result.getConfidence(),
                     result.getRiskLevel(),
                     result.getShouldAlarm(),
-                    result.getModelName());
-
-            return result;
-        } catch (Exception e) {
-            log.warn("AI 调用失败，改用 Core 本地兜底规则。error={}", e.getMessage());
-            return buildFallbackResult(request, "AI 调用失败，使用 Core 本地兜底规则：" + e.getMessage());
+                    result.getModelName(),
+                    result.getReason()
+            );
+            return;
         }
+
+        log.info(
+                "AI 推理成功。stationId={}, deviceId={}, taskId={}, requestMode={}, actualMode={}, fallbackUsed={}, label={}, confidence={}, riskLevel={}, shouldAlarm={}, model={}",
+                request.getStationId(),
+                request.getDeviceId(),
+                request.getTaskId(),
+                requestMode,
+                actualMode,
+                fallbackUsed,
+                result.getPredictedLabel(),
+                result.getConfidence(),
+                result.getRiskLevel(),
+                result.getShouldAlarm(),
+                result.getModelName()
+        );
+    }
+
+    private String safeMode(String mode, String defaultValue) {
+        if (mode == null || mode.isBlank()) {
+            return defaultValue == null || defaultValue.isBlank() ? "rule" : defaultValue.trim().toLowerCase();
+        }
+        return mode.trim().toLowerCase();
     }
 
     private AiPredictRequest buildAiRequest(CollectReportRequest request) {
@@ -187,6 +242,9 @@ public class AiInferenceService {
         result.setShouldAlarm(shouldAlarm);
         result.setReason(reason);
         result.setModelName("core-fallback-rule");
+        result.setRequestMode(resolveModelType(request));
+        result.setInferenceMode("rule");
+        result.setFallbackUsed(true);
         return result;
     }
 }

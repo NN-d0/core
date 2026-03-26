@@ -36,6 +36,31 @@ public class CollectReportResponse {
     private String aiLabel;
 
     /**
+     * AI 请求模式：RULE / CNN / AUTO
+     */
+    private String aiRequestMode;
+
+    /**
+     * AI 实际生效模式：RULE / CNN
+     */
+    private String aiActualMode;
+
+    /**
+     * 是否发生 fallback：0-否，1-是
+     */
+    private Integer aiFallbackUsed;
+
+    /**
+     * 实际模型名
+     */
+    private String aiModelName;
+
+    /**
+     * AI 说明 / fallback 原因
+     */
+    private String aiReason;
+
+    /**
      * 当前任务状态
      * 0-未启动
      * 1-运行中

@@ -40,6 +40,31 @@ public class SpectrumSnapshot {
 
     private String aiLabel;
 
+    /**
+     * AI 请求模式：RULE / CNN / AUTO
+     */
+    private String aiRequestMode;
+
+    /**
+     * AI 实际生效模式：RULE / CNN
+     */
+    private String aiActualMode;
+
+    /**
+     * 是否发生 fallback：0-否，1-是
+     */
+    private Integer aiFallbackUsed;
+
+    /**
+     * 本次实际使用的模型名
+     */
+    private String aiModelName;
+
+    /**
+     * AI 解释文本 / fallback 原因
+     */
+    private String aiReason;
+
     private Integer alarmFlag;
 
     /**

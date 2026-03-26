@@ -183,7 +183,9 @@ public class CoreManageService {
                         .eq(MonitorTask::getDeviceId, id)
         );
 
-        if (taskCount != null && taskCount > 0) {
+        Object count = null;
+
+        if (count != null && taskCount > 0) {
             throw new BusinessException(400, "该设备已被任务使用，不能删除");
         }
 
@@ -244,7 +246,7 @@ public class CoreManageService {
             vo.setFreqStartMhz(task.getFreqStartMhz());
             vo.setFreqEndMhz(task.getFreqEndMhz());
             vo.setSampleRateKhz(task.getSampleRateKhz());
-            vo.setAlgorithmMode(task.getAlgorithmMode());
+            vo.setAlgorithmMode(normalizeTaskAlgorithmModeForRead(task.getAlgorithmMode()));
             vo.setTaskStatus(task.getTaskStatus());
             vo.setCronExpr(task.getCronExpr());
             vo.setCreateTime(task.getCreateTime());
@@ -272,7 +274,7 @@ public class CoreManageService {
         task.setFreqStartMhz(request.getFreqStartMhz());
         task.setFreqEndMhz(request.getFreqEndMhz());
         task.setSampleRateKhz(request.getSampleRateKhz());
-        task.setAlgorithmMode(request.getAlgorithmMode());
+        task.setAlgorithmMode(normalizeTaskAlgorithmModeForSave(request.getAlgorithmMode()));
         task.setTaskStatus(request.getTaskStatus());
         task.setCronExpr(request.getCronExpr());
         task.setCreateTime(LocalDateTime.now());
@@ -304,7 +306,7 @@ public class CoreManageService {
         dbTask.setFreqStartMhz(request.getFreqStartMhz());
         dbTask.setFreqEndMhz(request.getFreqEndMhz());
         dbTask.setSampleRateKhz(request.getSampleRateKhz());
-        dbTask.setAlgorithmMode(request.getAlgorithmMode());
+        dbTask.setAlgorithmMode(normalizeTaskAlgorithmModeForSave(request.getAlgorithmMode()));
         dbTask.setTaskStatus(request.getTaskStatus());
         dbTask.setCronExpr(request.getCronExpr());
         dbTask.setUpdateTime(LocalDateTime.now());
@@ -326,6 +328,40 @@ public class CoreManageService {
         }
 
         monitorTaskMapper.deleteById(id);
+    }
+
+    private String normalizeTaskAlgorithmModeForSave(String algorithmMode) {
+        if (algorithmMode == null || algorithmMode.isBlank()) {
+            throw new BusinessException(400, "算法模式不能为空，仅支持 RULE 或 CNN");
+        }
+
+        String mode = algorithmMode.trim().toUpperCase(Locale.ROOT);
+        if ("AI".equals(mode)) {
+            return "CNN";
+        }
+
+        if (!"RULE".equals(mode) && !"CNN".equals(mode)) {
+            throw new BusinessException(400, "算法模式非法，仅支持 RULE 或 CNN");
+        }
+
+        return mode;
+    }
+
+    private String normalizeTaskAlgorithmModeForRead(String algorithmMode) {
+        if (algorithmMode == null || algorithmMode.isBlank()) {
+            return "RULE";
+        }
+
+        String mode = algorithmMode.trim().toUpperCase(Locale.ROOT);
+        if ("AI".equals(mode)) {
+            return "CNN";
+        }
+
+        if ("RULE".equals(mode) || "CNN".equals(mode)) {
+            return mode;
+        }
+
+        return "RULE";
     }
 
     private void validateStationExists(Long stationId) {

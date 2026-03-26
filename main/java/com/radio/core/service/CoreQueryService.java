@@ -367,6 +367,11 @@ public class CoreQueryService {
             vo.setSnrDb(snapshot.getSnrDb());
             vo.setOccupiedBandwidthKhz(snapshot.getOccupiedBandwidthKhz());
             vo.setAiLabel(snapshot.getAiLabel());
+            vo.setAiRequestMode(snapshot.getAiRequestMode());
+            vo.setAiActualMode(snapshot.getAiActualMode());
+            vo.setAiFallbackUsed(snapshot.getAiFallbackUsed());
+            vo.setAiModelName(snapshot.getAiModelName());
+            vo.setAiReason(snapshot.getAiReason());
             vo.setAlarmFlag(snapshot.getAlarmFlag());
             vo.setPowerPointsJson(snapshot.getPowerPointsJson());
             vo.setWaterfallRowJson(snapshot.getWaterfallRowJson());
@@ -426,6 +431,11 @@ public class CoreQueryService {
         vo.setSnrDb(snapshot.getSnrDb());
         vo.setOccupiedBandwidthKhz(snapshot.getOccupiedBandwidthKhz());
         vo.setAiLabel(snapshot.getAiLabel());
+        vo.setAiRequestMode(snapshot.getAiRequestMode());
+        vo.setAiActualMode(snapshot.getAiActualMode());
+        vo.setAiFallbackUsed(snapshot.getAiFallbackUsed());
+        vo.setAiModelName(snapshot.getAiModelName());
+        vo.setAiReason(snapshot.getAiReason());
         vo.setAlarmFlag(snapshot.getAlarmFlag());
         vo.setPowerPointsJson(snapshot.getPowerPointsJson());
         vo.setWaterfallRowJson(snapshot.getWaterfallRowJson());

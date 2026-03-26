@@ -42,10 +42,40 @@ public class AiPredictResultVO {
     private String reason;
 
     /**
-     * 模型名，例如 rule-model-v1
+     * 实际生效的模型名，例如 rule-model-v1 / 1dcnn-v1 / core-fallback-rule
      */
     @JsonProperty("model_name")
     private String modelName;
+
+    /**
+     * AI 请求模式：RULE / CNN / AUTO
+     */
+    @JsonProperty("request_mode")
+    private String requestMode;
+
+    /**
+     * 推理细分模式：rule / cnn
+     */
+    @JsonProperty("inference_mode")
+    private String inferenceMode;
+
+    /**
+     * 实际使用的模式：RULE / CNN
+     */
+    @JsonProperty("actual_mode")
+    private String actualMode;
+
+    /**
+     * 是否发生回退
+     */
+    @JsonProperty("fallback_used")
+    private Boolean fallbackUsed;
+
+    /**
+     * 回退原因
+     */
+    @JsonProperty("fallback_reason")
+    private String fallbackReason;
 
     /**
      * 阈值信息

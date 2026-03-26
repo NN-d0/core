@@ -17,9 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 定时推送最新频谱数据
- * 说明：
- * - WebSocket 优先推送
- * - 推送内容来自现有实时接口逻辑（Redis 优先，DB 兜底）
+ *
+ * 第二阶段优化说明：
+ * 1. 将推送检查间隔从 2 秒缩短到 500ms
+ * 2. 仍然按 snapshotId 去重，不会重复推送同一条数据
+ * 3. 与 Python 仿真器 1 秒上报节奏配合后，页面刷新观感更顺滑
  */
 @Slf4j
 @Component
@@ -35,7 +37,7 @@ public class RealtimePushScheduler {
      */
     private final ConcurrentHashMap<Long, Long> lastPushedSnapshotMap = new ConcurrentHashMap<>();
 
-    @Scheduled(fixedDelay = 2000)
+    @Scheduled(initialDelay = 1000, fixedDelay = 500)
     public void pushLatestRealtimeData() {
         Set<Long> activeStationIds = monitorSessionManager.getActiveStationIds();
         if (activeStationIds == null || activeStationIds.isEmpty()) {
@@ -63,7 +65,7 @@ public class RealtimePushScheduler {
                 monitorSessionManager.sendToStation(stationId, objectMapper.writeValueAsString(result));
                 lastPushedSnapshotMap.put(stationId, latestData.getId());
             } catch (Exception e) {
-                log.warn("WebSocket定时推送失败，stationId={}, error={}", stationId, e.getMessage());
+                log.warn("WebSocket 定时推送失败，stationId={}, error={}", stationId, e.getMessage());
             }
         }
     }

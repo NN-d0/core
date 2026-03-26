@@ -130,8 +130,13 @@ public class SpectrumCollectService {
         // 1. 由 Core 主动调用 AI
         AiPredictResultVO aiResult = aiInferenceService.predict(request);
 
-        // 2. AI 标签统一由 Core 决定
+        // 2. AI 标签与推理元信息统一由 Core 决定
         String aiLabel = resolveAiLabel(request, aiResult);
+        String aiRequestMode = resolveAiRequestMode(request, aiResult);
+        String aiActualMode = resolveAiActualMode(request, aiResult);
+        Integer aiFallbackUsed = resolveAiFallbackUsed(aiResult);
+        String aiModelName = resolveAiModelName(aiResult);
+        String aiReason = resolveAiReason(aiResult);
 
         // 3. 告警是否触发优先采用 AI 的 shouldAlarm，AI 异常时再走阈值兜底
         int alarmFlag = resolveAlarmFlagByAiOrThreshold(request, aiResult);
@@ -148,6 +153,11 @@ public class SpectrumCollectService {
         snapshot.setSnrDb(request.getSnrDb());
         snapshot.setOccupiedBandwidthKhz(request.getOccupiedBandwidthKhz());
         snapshot.setAiLabel(aiLabel);
+        snapshot.setAiRequestMode(aiRequestMode);
+        snapshot.setAiActualMode(aiActualMode);
+        snapshot.setAiFallbackUsed(aiFallbackUsed);
+        snapshot.setAiModelName(aiModelName);
+        snapshot.setAiReason(aiReason);
         snapshot.setAlarmFlag(alarmFlag);
         snapshot.setPowerPointsJson(toJsonArray(request.getPowerPoints()));
         snapshot.setWaterfallRowJson(toJsonArray(waterfallRow));
@@ -177,15 +187,19 @@ public class SpectrumCollectService {
         response.setAlarmId(alarmId);
         response.setAlarmFlag(alarmFlag);
         response.setAiLabel(aiLabel);
+        response.setAiRequestMode(aiRequestMode);
+        response.setAiActualMode(aiActualMode);
+        response.setAiFallbackUsed(aiFallbackUsed);
+        response.setAiModelName(aiModelName);
+        response.setAiReason(aiReason);
         response.setTaskStatus(task.getTaskStatus());
         response.setStationId(snapshot.getStationId());
         response.setDeviceId(snapshot.getDeviceId());
         response.setTaskId(snapshot.getTaskId());
         response.setCaptureTime(snapshot.getCaptureTime());
-
-        log.info("采集上报成功，snapshotId={}, stationId={}, deviceId={}, taskId={}, taskStatus={}, alarmFlag={}, aiLabel={}",
+        log.info("采集上报成功，snapshotId={}, stationId={}, deviceId={}, taskId={}, taskStatus={}, alarmFlag={}, aiLabel={}, requestMode={}, actualMode={}, fallbackUsed={}, modelName={}",
                 snapshot.getId(), snapshot.getStationId(), snapshot.getDeviceId(), snapshot.getTaskId(),
-                task.getTaskStatus(), alarmFlag, aiLabel);
+                task.getTaskStatus(), alarmFlag, aiLabel, aiRequestMode, aiActualMode, aiFallbackUsed, aiModelName);
 
         return response;
     }
@@ -200,6 +214,59 @@ public class SpectrumCollectService {
         if (request.getPowerPoints() == null || request.getPowerPoints().isEmpty()) {
             throw new BusinessException(400, "powerPoints 不能为空");
         }
+    }
+
+    private String resolveAiRequestMode(CollectReportRequest request, AiPredictResultVO aiResult) {
+        if (aiResult != null && aiResult.getRequestMode() != null && !aiResult.getRequestMode().isBlank()) {
+            return normalizeAiMode(aiResult.getRequestMode(), "RULE");
+        }
+        if (request != null && request.getModelType() != null && !request.getModelType().isBlank()) {
+            return normalizeAiMode(request.getModelType(), "RULE");
+        }
+        return "RULE";
+    }
+
+    private String resolveAiActualMode(CollectReportRequest request, AiPredictResultVO aiResult) {
+        if (aiResult != null && aiResult.getActualMode() != null && !aiResult.getActualMode().isBlank()) {
+            return normalizeAiMode(aiResult.getActualMode(), "RULE");
+        }
+        if (aiResult != null && aiResult.getInferenceMode() != null && !aiResult.getInferenceMode().isBlank()) {
+            return normalizeAiMode(aiResult.getInferenceMode(), "RULE");
+        }
+        return resolveAiRequestMode(request, aiResult);
+    }
+
+    private Integer resolveAiFallbackUsed(AiPredictResultVO aiResult) {
+        return (aiResult != null && Boolean.TRUE.equals(aiResult.getFallbackUsed())) ? 1 : 0;
+    }
+
+    private String resolveAiModelName(AiPredictResultVO aiResult) {
+        if (aiResult == null || aiResult.getModelName() == null || aiResult.getModelName().isBlank()) {
+            return "unknown-model";
+        }
+        return aiResult.getModelName().trim();
+    }
+
+    private String resolveAiReason(AiPredictResultVO aiResult) {
+        if (aiResult == null || aiResult.getReason() == null || aiResult.getReason().isBlank()) {
+            return "";
+        }
+        return aiResult.getReason().trim();
+    }
+
+    private String normalizeAiMode(String mode, String defaultValue) {
+        if (mode == null || mode.isBlank()) {
+            return defaultValue;
+        }
+
+        String value = mode.trim().toUpperCase();
+        if ("AI".equals(value)) {
+            return "CNN";
+        }
+        if ("RULE".equals(value) || "CNN".equals(value) || "AUTO".equals(value)) {
+            return value;
+        }
+        return defaultValue;
     }
 
     private String resolveAiLabel(CollectReportRequest request, AiPredictResultVO aiResult) {
@@ -364,6 +431,11 @@ public class SpectrumCollectService {
         vo.setSnrDb(snapshot.getSnrDb());
         vo.setOccupiedBandwidthKhz(snapshot.getOccupiedBandwidthKhz());
         vo.setAiLabel(snapshot.getAiLabel());
+        vo.setAiRequestMode(snapshot.getAiRequestMode());
+        vo.setAiActualMode(snapshot.getAiActualMode());
+        vo.setAiFallbackUsed(snapshot.getAiFallbackUsed());
+        vo.setAiModelName(snapshot.getAiModelName());
+        vo.setAiReason(snapshot.getAiReason());
         vo.setAlarmFlag(snapshot.getAlarmFlag());
         vo.setPowerPointsJson(snapshot.getPowerPointsJson());
         vo.setWaterfallRowJson(snapshot.getWaterfallRowJson());
